@@ -69,6 +69,16 @@ Effectively, think of this as a replacement for `git pull --recurse-submodules`.
 
 ## In CI pipelines
 
+The most convenient way to run the script in CI is to just download it and feed
+its contents into bash:
+
+    /bin/bash -c "$(curl --fail --silent --show-error --location $GIT_DEPS_URL)"
+
+Where `GIT_DEPS_URL` is defined as (eg)
+https://raw.githubusercontent.com/oanda/git-deps/main/git-deps
+
+(Obviously, this assumes you have bash and curl available in your build agent.)
+
 If the script detects that the `CI` environment variable is set, it will do
 _shallow clones_ of all the defined repos in `.gitdeps`, at the given branches
 or tags.
