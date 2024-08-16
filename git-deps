@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+
+# git-deps - script to manage source dependencies with git
+# Copyright (C) 2023 OANDA Corporation
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+set -e
+set -o pipefail
+
+# Install by placing the file in a directory which is in the PATH and setting as
+# executable.
+
+# Usage: git deps
+# For each dependency in .gitdeps, will either clone the dependency (if it
+# doesn't already exist locally), or update the clone by pulling from its remote.
+# Also updates the origin if that changed.
+# Works recursively if the deps have .gitdeps files.
+
+# Requires .gitdeps file in cwd, in format:
+# local_path;origin_repo;branch_or_tag
+# E.g. deps/abc;git@host.com:user/abc;main
+#      # this is a comment
+#      deps/def;git@host.com:user/def;v1.2.0
+#
+# You will want to add 'deps/' (e.g.) to your .gitignore file.
+
+version=1.0.2
+
+function info () {
+  echo "🔵 $(date -u -Iseconds) $1"
+}
+
+function err () {
+  echo "🔴 $(date -u -Iseconds) $1"
+  exit 1
+}
+
+function wrn () {
+  echo "🟡 $(date -u -Iseconds) $1"
+}
+
+function git_dep () {
+  path="$1"
+  origin="$2"
+  branch="$3" # Could be a tag
+
+  if [ -d "$path" ]
+  then # Assume we have a local clone and update it
+    [[ -z "$CI" ]] || err "$path: committed into repo, needs to be removed"
+
+    (cd "$path";\
+    [[ -z "$(git status --short --untracked-files=no)" ]] || err "$path: working directory dirty";\
+    [[ "$origin" == "$(git remote get-url origin)" ]] || git remote set-url origin "$origin";\
+    git fetch --quiet;\
+    git checkout --quiet "$branch";\
+    [[ -z "$(git branch --show-current)" ]] || git rebase --quiet "origin/$branch" 2>/dev/null || wrn "$path: $branch: remember to push!")
+  else # We don't have a local clone
+    if [ -z "$CI" ]
+    then # In local dev we need full clones
+      git clone --quiet --branch="$branch" "$origin" "$path"
+    else # In CI we don't need full clones
+      git clone --quiet --depth=1 --branch="$branch" "$origin" "$path"
+    fi
+  fi
+
+  git_deps "$path"
+}
+
+function git_deps () {
+  path="$1"
+
+  cd "$path"
+
+  msg="$path #️⃣  $(git --no-pager log -n 1 --oneline --decorate)"
+  info "${msg:0:80}"
+
+  if [ -f .gitdeps ]
+  then
+    while IFS=';' read -ra line
+    do
+      if [ -z "$line" -o "${line:0:1}" == "#" ]
+      then # Skip empty lines and comments
+        continue
+      fi
+
+      git_dep "${line[0]}" "${line[1]}" "${line[2]}" &
+    done <.gitdeps
+  fi
+}
+
+curr_branch="$(git branch --show-current)"
+
+if [ -n "$curr_branch" -a -z "$CI" ]
+then # On a branch and in local dev
+  git pull --quiet 2>/dev/null || wrn "$(basename $PWD): $curr_branch: remember to push!"
+  git fetch origin 'refs/notes/*:refs/notes/*'
+fi
+
+info "git-deps v$version"
+git_deps .
+wait
+
