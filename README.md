@@ -52,6 +52,11 @@ each line interpreted as follows:
 Optionally, you can have other fields after the first three; they will be
 ignored by the script.
 
+This script assumes that the remote it is working with is called `origin`. You
+can override the name by setting the `REMOTE` environment variable. Eg,
+
+    REMOTE=upstream git deps
+
 ### Local development
 
 In your project, make sure you have no uncommitted changes. Then, run `git

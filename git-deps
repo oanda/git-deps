@@ -36,7 +36,12 @@ set -o pipefail
 #
 # You will want to add 'deps/' (e.g.) to your .gitignore file.
 
-version=1.0.2
+version=1.0.3
+
+if [ -z "$REMOTE" ]
+then
+  REMOTE=origin
+fi
 
 function info () {
   echo "🔵 $(date -u -Iseconds) $1"
@@ -62,10 +67,10 @@ function git_dep () {
 
     (cd "$path";\
     [[ -z "$(git status --short --untracked-files=no)" ]] || err "$path: working directory dirty";\
-    [[ "$origin" == "$(git remote get-url origin)" ]] || git remote set-url origin "$origin";\
-    git fetch --quiet;\
+    [[ "$origin" == "$(git remote get-url $REMOTE)" ]] || git remote set-url $REMOTE "$origin";\
+    git fetch --quiet "$REMOTE";\
     git checkout --quiet "$branch";\
-    [[ -z "$(git branch --show-current)" ]] || git rebase --quiet "origin/$branch" 2>/dev/null || wrn "$path: $branch: remember to push!")
+    [[ -z "$(git branch --show-current)" ]] || git rebase --quiet "$REMOTE/$branch" 2>/dev/null || wrn "$path: $branch: remember to push!")
   else # We don't have a local clone
     if [ -z "$CI" ]
     then # In local dev we need full clones
@@ -104,8 +109,8 @@ curr_branch="$(git branch --show-current)"
 
 if [ -n "$curr_branch" -a -z "$CI" ]
 then # On a branch and in local dev
-  git pull --quiet 2>/dev/null || wrn "$(basename $PWD): $curr_branch: remember to push!"
-  git fetch origin 'refs/notes/*:refs/notes/*'
+  git pull --quiet "$REMOTE" 2>/dev/null || wrn "$(basename $PWD): $curr_branch: remember to push!"
+  git fetch "$REMOTE" 'refs/notes/*:refs/notes/*'
 fi
 
 info "git-deps v$version"
